@@ -29,13 +29,19 @@ struct MainAppView: View {
     @ObservedObject var profileManager: ProfileManager
     
     var body: some View {
-        LockedView()
-            .environmentObject(appLocker)
-            .environmentObject(profileManager)
-            .onAppear {
-                print("✅ MainAppView appeared")
-                print("   - AppLocker initialized: \(appLocker.isAuthorized)")
-                print("   - Profiles loaded: \(profileManager.profiles.count)")
-            }
+        TabView {
+            LockedView()
+                .tabItem { Label("Verrou", systemImage: "lock.fill") }
+
+            SchedulesView()
+                .tabItem { Label("Plannings", systemImage: "calendar") }
+        }
+        .environmentObject(appLocker)
+        .environmentObject(profileManager)
+        .onAppear {
+            SharedStore.migrateIfNeeded()
+            // Re-arm the rolling DeviceActivity window on every launch.
+            ScheduleManager.refresh()
+        }
     }
 }

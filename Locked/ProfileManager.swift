@@ -14,6 +14,7 @@ class ProfileManager: ObservableObject {
     @Published var currentProfileId: UUID?
     
     init() {
+        SharedStore.migrateIfNeeded()
         loadProfiles()
         ensureDefaultProfile()
     }
@@ -24,7 +25,7 @@ class ProfileManager: ObservableObject {
     
     func loadProfiles() {
         // Attempt to load at least three saved profiles
-        if let data = UserDefaults.standard.data(forKey: "savedProfiles"),
+        if let data = SharedStore.defaults.data(forKey: "savedProfiles"),
            let decoded = try? JSONDecoder().decode([Profile].self, from: data),
            decoded.count >= 3 {
             profiles = decoded
@@ -60,7 +61,7 @@ class ProfileManager: ObservableObject {
         }
 
         // Restore or initialize currentProfileId
-        if let savedId = UserDefaults.standard.string(forKey: "currentProfileId"),
+        if let savedId = SharedStore.defaults.string(forKey: "currentProfileId"),
            let uuid = UUID(uuidString: savedId),
            profiles.contains(where: { $0.id == uuid }) {
             currentProfileId = uuid
@@ -71,9 +72,9 @@ class ProfileManager: ObservableObject {
     
     func saveProfiles() {
         if let encoded = try? JSONEncoder().encode(profiles) {
-            UserDefaults.standard.set(encoded, forKey: "savedProfiles")
+            SharedStore.defaults.set(encoded, forKey: "savedProfiles")
         }
-        UserDefaults.standard.set(currentProfileId?.uuidString, forKey: "currentProfileId")
+        SharedStore.defaults.set(currentProfileId?.uuidString, forKey: "currentProfileId")
     }
     
     func addProfile(name: String, icon: String = "bell.slash", isAllowListMode: Bool = false) {
@@ -199,27 +200,5 @@ class ProfileManager: ObservableObject {
             }
             saveProfiles()
         }
-    }
-}
-
-struct Profile: Identifiable, Codable {
-    let id: UUID
-    var name: String
-    var appTokens: Set<ApplicationToken>
-    var categoryTokens: Set<ActivityCategoryToken>
-    var icon: String // New property for icon
-    var isAllowListMode: Bool // Property for allow/lock mode
-
-    var isDefault: Bool {
-        name == "Locked"
-    }
-
-    init(name: String, appTokens: Set<ApplicationToken>, categoryTokens: Set<ActivityCategoryToken>, icon: String = "bell.slash", isAllowListMode: Bool = false) {
-        self.id = UUID()
-        self.name = name
-        self.appTokens = appTokens
-        self.categoryTokens = categoryTokens
-        self.icon = icon
-        self.isAllowListMode = isAllowListMode
     }
 }
