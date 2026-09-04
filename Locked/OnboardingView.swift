@@ -532,12 +532,13 @@ struct NFCSetupPage: View {
         }
     }
     
-    #if DEBUG
+    // The alert that calls this is not itself behind #if DEBUG, so keeping the
+    // function debug-only broke Release builds. The button that raises the
+    // alert stays debug-only, so this is unreachable in Release anyway.
     private func debugSkipNFCSetup() {
         writeSuccess = true
         hasWrittenTag = true
     }
-    #endif
     
     private func completeOnboarding() {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
