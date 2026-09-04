@@ -2,24 +2,25 @@
 //  ScheduleEditorView.swift
 //  Locked
 //
-//  One rule: which profile, which days, which hours.
+//  One rule: which apps, which days, which hours.
 //
 
 import SwiftUI
+import FamilyControls
 
 struct ScheduleEditorView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var profileManager: ProfileManager
     @ObservedObject var store: ScheduleStore
 
     let existing: ScheduleRule?
 
     @State private var name: String = ""
-    @State private var profileID: UUID?
     @State private var weekdays: Set<Int> = [2, 3, 4, 5, 6]
     @State private var startMinutes: Int = 9 * 60
     @State private var endMinutes: Int = 17 * 60
     @State private var isEnabled: Bool = true
+    @State private var selection = FamilyActivitySelection()
+    @State private var isPickingApps = false
 
     var body: some View {
         NavigationStack {
@@ -28,19 +29,23 @@ struct ScheduleEditorView: View {
                     TextField("Travail, Loisir, Nuit…", text: $name)
                 }
 
-                Section("Profil bloqué") {
-                    Picker("Profil", selection: $profileID) {
-                        ForEach(profileManager.profiles) { profile in
-                            Label(profile.name, systemImage: profile.icon)
-                                .tag(Optional(profile.id))
+                Section {
+                    Button {
+                        isPickingApps = true
+                    } label: {
+                        HStack {
+                            Label("Choisir les apps", systemImage: "app.badge")
+                            Spacer()
+                            Text(selectionLabel)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    if let profile = profileManager.profiles.first(where: { $0.id == profileID }) {
-                        Text(profile.isAllowListMode
-                             ? "Liste blanche : tout est bloqué sauf \(profile.appTokens.count) app(s)."
-                             : "\(profile.appTokens.count) app(s) et \(profile.categoryTokens.count) catégorie(s) bloquées.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                } header: {
+                    Text("Apps bloquées")
+                } footer: {
+                    if selectionCount == 0 {
+                        Text("Sans app choisie, la règle ne bloque rien.")
+                            .foregroundStyle(.orange)
                     }
                 }
 
@@ -57,17 +62,17 @@ struct ScheduleEditorView: View {
                     .buttonStyle(.borderless)
                 }
 
-                Section("Horaires") {
+                Section {
                     TimeRow(label: "Début", minutes: $startMinutes)
                     TimeRow(label: "Fin", minutes: $endMinutes)
+                } header: {
+                    Text("Horaires")
+                } footer: {
                     if endMinutes <= startMinutes {
-                        Label("Se termine le lendemain matin.", systemImage: "moon.stars")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        Text("Se termine le lendemain matin. Durée : \(durationLabel).")
+                    } else {
+                        Text("Durée : \(durationLabel).")
                     }
-                    Text("Durée : \(durationLabel)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -94,12 +99,27 @@ struct ScheduleEditorView: View {
                         .disabled(!isValid)
                 }
             }
+            .familyActivityPicker(isPresented: $isPickingApps, selection: $selection)
             .onAppear(perform: load)
         }
     }
 
+    private var selectionCount: Int {
+        selection.applicationTokens.count + selection.categoryTokens.count
+    }
+
+    private var selectionLabel: String {
+        let apps = selection.applicationTokens.count
+        let categories = selection.categoryTokens.count
+        if apps == 0 && categories == 0 { return "Aucune" }
+        var parts: [String] = []
+        if apps > 0 { parts.append("\(apps) app\(apps > 1 ? "s" : "")") }
+        if categories > 0 { parts.append("\(categories) catégorie\(categories > 1 ? "s" : "")") }
+        return parts.joined(separator: ", ")
+    }
+
     private var isValid: Bool {
-        profileID != nil && !weekdays.isEmpty && startMinutes != endMinutes
+        !weekdays.isEmpty && startMinutes != endMinutes
     }
 
     private var durationLabel: String {
@@ -110,30 +130,25 @@ struct ScheduleEditorView: View {
     }
 
     private func load() {
-        guard let existing else {
-            profileID = profileID ?? profileManager.profiles.first?.id
-            return
-        }
+        guard let existing else { return }
         name = existing.name
-        profileID = existing.profileID
         weekdays = existing.weekdays
         startMinutes = existing.startMinutes
         endMinutes = existing.endMinutes
         isEnabled = existing.isEnabled
+        selection = store.selection(for: existing.id)
     }
 
     private func commit() {
-        guard let profileID else { return }
         let rule = ScheduleRule(
             id: existing?.id ?? UUID(),
             name: name.isEmpty ? "Sans nom" : name,
-            profileID: profileID,
             weekdays: weekdays,
             startMinutes: startMinutes,
             endMinutes: endMinutes,
             isEnabled: isEnabled
         )
-        store.save(rule)
+        store.save(rule, selection: selection)
         dismiss()
     }
 }

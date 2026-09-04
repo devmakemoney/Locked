@@ -25,7 +25,7 @@ let lundi = 2, mardi = 3, samedi = 7, dimanche = 1
 
 // --- Regle simple, sans passage de minuit : travail matinee lun-ven 10h00-13h15
 let matinee = ScheduleRule(
-    name: "Travail matinee", profileID: UUID(),
+    name: "Travail matinee",
     weekdays: [2, 3, 4, 5, 6], startMinutes: 600, endMinutes: 795)
 
 print("Regle simple 10h00-13h15 lun-ven")
@@ -39,7 +39,7 @@ check(matinee.durationMinutes == 195, "duree 3h15")
 
 // --- Regle traversant minuit : loisir bloque 20h00 -> 18h40, tous les jours
 let loisir = ScheduleRule(
-    name: "Loisir", profileID: UUID(),
+    name: "Loisir",
     weekdays: [1, 2, 3, 4, 5, 6, 7], startMinutes: 1200, endMinutes: 1120)
 
 print("Regle traversant minuit 20h00-18h40 tous les jours")
@@ -54,7 +54,7 @@ check(!loisir.isActive(at: date(2026, 9, 8, 19, 30), calendar: cal), "19h30 : in
 
 // --- Traversee de minuit avec jours restreints : le lendemain herite du jour precedent
 let nuitSemaine = ScheduleRule(
-    name: "Travail nuit", profileID: UUID(),
+    name: "Travail nuit",
     weekdays: [6], startMinutes: 1065, endMinutes: 480) // vendredi 17h45 -> 08h00
 
 print("Regle vendredi 17h45 -> samedi 08h00")
@@ -66,7 +66,7 @@ check(!nuitSemaine.isActive(at: date(2026, 9, 11, 7, 0), calendar: cal), "vendre
 
 // --- Bascule dimanche -> lundi (weekday 1 -> 2), le cas qui casse les index
 let dimancheSoir = ScheduleRule(
-    name: "Dimanche soir", profileID: UUID(),
+    name: "Dimanche soir",
     weekdays: [1], startMinutes: 1320, endMinutes: 360) // dim 22h -> lun 06h
 
 print("Bascule dimanche -> lundi")

@@ -15,7 +15,6 @@ class LockedMonitorExtension: DeviceActivityMonitor {
 
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)
-        SharedStore.migrateIfNeeded()
         NSLog("[LockedMonitor] start \(activity.rawValue)")
         ShieldEngine.apply()
     }

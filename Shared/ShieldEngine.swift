@@ -26,8 +26,8 @@ enum ShieldEngine {
         }
     }
 
-    /// Recompute and push the shield. Safe to call from anywhere, any number of
-    /// times — it is idempotent.
+    /// Recompute and push the shield. Idempotent — safe to call from anywhere,
+    /// any number of times.
     @discardableResult
     static func apply(at date: Date = Date()) -> [ScheduleRule] {
         if let until = SharedStore.overrideUntil, until <= date {
@@ -35,40 +35,27 @@ enum ShieldEngine {
         }
 
         let rules = activeRules(at: date)
-        let profiles = SharedStore.profiles
-
         guard !rules.isEmpty else {
             clear()
             return []
         }
 
+        let selections = SharedStore.selections
         var blockedApps = Set<ApplicationToken>()
         var blockedCategories = Set<ActivityCategoryToken>()
-        var allowListTokens: Set<ApplicationToken>?
 
         for rule in rules {
-            guard let profile = profiles.first(where: { $0.id == rule.profileID }) else { continue }
-            if profile.isAllowListMode {
-                // Intersect: with two allow-lists active, only apps allowed by
-                // both stay reachable — the stricter reading.
-                allowListTokens = allowListTokens.map { $0.intersection(profile.appTokens) } ?? profile.appTokens
-            } else {
-                blockedApps.formUnion(profile.appTokens)
-                blockedCategories.formUnion(profile.categoryTokens)
-            }
+            guard let selection = selections[rule.id] else { continue }
+            blockedApps.formUnion(selection.applicationTokens)
+            blockedCategories.formUnion(selection.categoryTokens)
         }
 
-        if let allowed = allowListTokens {
-            store.shield.applications = nil
-            store.shield.applicationCategories = allowed.isEmpty ? .all() : .all(except: allowed)
-        } else {
-            store.shield.applications = blockedApps.isEmpty ? nil : blockedApps
-            store.shield.applicationCategories = blockedCategories.isEmpty
-                ? ShieldSettings.ActivityCategoryPolicy.none
-                : .specific(blockedCategories)
-        }
+        store.shield.applications = blockedApps.isEmpty ? nil : blockedApps
+        store.shield.applicationCategories = blockedCategories.isEmpty
+            ? ShieldSettings.ActivityCategoryPolicy.none
+            : .specific(blockedCategories)
 
-        // Cannot delete Locked while it is enforcing something.
+        // Locked cannot be deleted while it is enforcing something.
         store.application.denyAppRemoval = true
         return rules
     }

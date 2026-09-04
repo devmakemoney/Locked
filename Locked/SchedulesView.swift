@@ -2,21 +2,21 @@
 //  SchedulesView.swift
 //  Locked
 //
-//  The schedule tab: what is blocked right now, the rules, and the NFC unlock.
+//  The whole app: what is blocked right now, the rules, and the NFC unlock.
 //
 
 import SwiftUI
 
 struct SchedulesView: View {
-    @EnvironmentObject private var profileManager: ProfileManager
     @StateObject private var store = ScheduleStore()
     @StateObject private var nfcReader = NFCReader()
 
     @State private var editingRule: ScheduleRule?
     @State private var isCreating = false
     @State private var showWrongTag = false
-    @State private var showNoTagPaired = false
     @State private var showSeedConfirm = false
+    @State private var showTagWritten = false
+    @State private var tagWriteSucceeded = false
     @State private var tick = Date()
 
     private let clock = Timer.publish(every: 20, on: .main, in: .common).autoconnect()
@@ -24,12 +24,13 @@ struct SchedulesView: View {
     var body: some View {
         NavigationStack {
             List {
+                if !store.isAuthorized { authorizationSection }
                 statusSection
                 if store.overrideUntil != nil { overrideSection }
                 rulesSection
                 settingsSection
             }
-            .navigationTitle("Plannings")
+            .navigationTitle("Locked")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { isCreating = true } label: { Image(systemName: "plus") }
@@ -37,33 +38,53 @@ struct SchedulesView: View {
             }
             .sheet(isPresented: $isCreating) {
                 ScheduleEditorView(store: store, existing: nil)
-                    .environmentObject(profileManager)
             }
             .sheet(item: $editingRule) { rule in
                 ScheduleEditorView(store: store, existing: rule)
-                    .environmentObject(profileManager)
             }
             .alert("Mauvaise carte", isPresented: $showWrongTag) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text("Ce tag n'est pas celui associé à Locked.")
+                Text("Ce tag ne porte pas le texte attendu.")
             }
-            .alert("Aucune carte associée", isPresented: $showNoTagPaired) {
+            .alert(tagWriteSucceeded ? "Carte prête" : "Échec", isPresented: $showTagWritten) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text("Crée d'abord ta carte NFC depuis l'onglet Verrou, sinon le déblocage est impossible.")
+                Text(tagWriteSucceeded
+                     ? "Garde-la hors de portée : c'est elle qui ouvre les blocages."
+                     : "L'écriture a échoué. Réessaie en gardant le tag contre le haut du téléphone.")
             }
             .confirmationDialog("Charger la routine ?", isPresented: $showSeedConfirm, titleVisibility: .visible) {
-                Button("Créer les 3 règles") { seedRoutine() }
+                Button("Créer les 3 règles") { store.seedRoutine() }
                 Button("Annuler", role: .cancel) { }
             } message: {
-                Text("Travail bloqué hors 8h–10h et 13h15–17h45, loisir écran ouvert seulement de 18h40 à 20h.")
+                Text("Travail bloqué hors 8h–10h et 13h15–17h45, loisir écran ouvert seulement de 18h40 à 20h. Les apps restent à choisir dans chaque règle.")
             }
             .onReceive(clock) { now in
                 tick = now
                 store.refreshState()
             }
             .onAppear { store.refreshState() }
+        }
+    }
+
+    // MARK: - Authorization
+
+    private var authorizationSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Autorisation manquante", systemImage: "exclamationmark.triangle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.orange)
+                Text("Sans l'accès Temps d'écran, aucune app ne peut être bloquée.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button("Autoriser") {
+                    Task { await store.requestAuthorization() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(.vertical, 4)
         }
     }
 
@@ -89,7 +110,7 @@ struct SchedulesView: View {
                 Button {
                     scanToUnlock()
                 } label: {
-                    Label("Débloquer avec la carte NFC", systemImage: "wave.3.right")
+                    Label("Débloquer avec la carte", systemImage: "wave.3.right")
                 }
             }
         }
@@ -99,10 +120,10 @@ struct SchedulesView: View {
         guard !store.activeRuleIDs.isEmpty else {
             return store.isEngineEnabled ? "Aucune règle active à cette heure." : "Moteur désactivé."
         }
-        let names = store.rules
+        return store.rules
             .filter { store.activeRuleIDs.contains($0.id) }
             .map(\.name)
-        return names.joined(separator: ", ")
+            .joined(separator: ", ")
     }
 
     private var overrideSection: some View {
@@ -139,7 +160,7 @@ struct SchedulesView: View {
                 ForEach(store.rules) { rule in
                     RuleRow(
                         rule: rule,
-                        profileName: profileManager.profiles.first { $0.id == rule.profileID }?.name,
+                        blockedCount: store.blockedCount(for: rule.id),
                         isActive: store.activeRuleIDs.contains(rule.id),
                         onToggle: { store.toggle(rule, enabled: $0) }
                     )
@@ -153,7 +174,7 @@ struct SchedulesView: View {
         } header: {
             Text("Règles")
         } footer: {
-            Text("Chaque règle a ses propres jours et horaires. Une plage qui finit avant son début se termine le lendemain matin.")
+            Text("Chaque règle a ses propres apps, jours et horaires. Une plage qui finit avant son début se termine le lendemain matin.")
         }
     }
 
@@ -166,11 +187,17 @@ struct SchedulesView: View {
                 set: { store.setEngineEnabled($0) }
             ))
 
-            Picker("Durée du déblocage NFC", selection: $store.overrideMinutes) {
+            Picker("Durée du déblocage", selection: $store.overrideMinutes) {
                 Text("15 min").tag(15)
                 Text("30 min").tag(30)
                 Text("1 h").tag(60)
                 Text("2 h").tag(120)
+            }
+
+            Button {
+                writeTag()
+            } label: {
+                Label("Écrire ma carte NFC", systemImage: "wave.3.right.circle")
             }
 
             if !store.rules.isEmpty {
@@ -203,19 +230,11 @@ struct SchedulesView: View {
         }
     }
 
-    private func seedRoutine() {
-        let work = ensureProfile(named: "Travail", icon: "briefcase.fill")
-        let leisure = ensureProfile(named: "Loisir", icon: "iphone")
-        store.seedRoutine(workProfileID: work, leisureProfileID: leisure)
-    }
-
-    private func ensureProfile(named name: String, icon: String) -> UUID {
-        if let existing = profileManager.profiles.first(where: { $0.name == name }) {
-            return existing.id
+    private func writeTag() {
+        nfcReader.write(SharedStore.nfcTagPayload) { success in
+            tagWriteSucceeded = success
+            showTagWritten = true
         }
-        let profile = Profile(name: name, appTokens: [], categoryTokens: [], icon: icon)
-        profileManager.addProfile(newProfile: profile)
-        return profile.id
     }
 }
 
@@ -223,7 +242,7 @@ struct SchedulesView: View {
 
 struct RuleRow: View {
     let rule: ScheduleRule
-    let profileName: String?
+    let blockedCount: Int
     let isActive: Bool
     let onToggle: (Bool) -> Void
 
@@ -240,8 +259,12 @@ struct RuleRow: View {
                 Text("\(rule.rangeLabel) · \(rule.weekdaysLabel)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                if let profileName {
-                    Text(profileName)
+                if blockedCount == 0 {
+                    Text("Aucune app choisie")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text("\(blockedCount) sélection\(blockedCount > 1 ? "s" : "")")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -249,11 +272,8 @@ struct RuleRow: View {
 
             Spacer()
 
-            Toggle("", isOn: Binding(
-                get: { rule.isEnabled },
-                set: onToggle
-            ))
-            .labelsHidden()
+            Toggle("", isOn: Binding(get: { rule.isEnabled }, set: onToggle))
+                .labelsHidden()
         }
         .padding(.vertical, 2)
     }

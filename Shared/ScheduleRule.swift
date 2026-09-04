@@ -2,7 +2,9 @@
 //  ScheduleRule.swift
 //  Locked — shared between the app and the LockedMonitor extension
 //
-//  A rule says: "block profile X on these weekdays, from HH:mm to HH:mm".
+//  A rule says: "block these apps on these weekdays, from HH:mm to HH:mm".
+//  The apps live in SharedStore.selections keyed by rule id, so this type stays
+//  pure Foundation and its date logic can be tested outside iOS.
 //  Every day is independent — a rule carries its own set of weekdays, and you
 //  can create as many rules as you want for the same day.
 //
@@ -12,8 +14,6 @@ import Foundation
 struct ScheduleRule: Identifiable, Codable, Hashable {
     var id: UUID
     var name: String
-    /// The profile whose apps get shielded while this rule is active.
-    var profileID: UUID
     /// Calendar convention: 1 = Sunday, 2 = Monday, … 7 = Saturday.
     var weekdays: Set<Int>
     /// Minutes since midnight, 0…1439.
@@ -25,7 +25,6 @@ struct ScheduleRule: Identifiable, Codable, Hashable {
     init(
         id: UUID = UUID(),
         name: String,
-        profileID: UUID,
         weekdays: Set<Int>,
         startMinutes: Int,
         endMinutes: Int,
@@ -33,7 +32,6 @@ struct ScheduleRule: Identifiable, Codable, Hashable {
     ) {
         self.id = id
         self.name = name
-        self.profileID = profileID
         self.weekdays = weekdays
         self.startMinutes = startMinutes
         self.endMinutes = endMinutes
