@@ -27,11 +27,15 @@ enum ScheduleManager {
 
     static let overrideActivityName = DeviceActivityName("nfc_override")
 
-    /// Rebuild the whole monitoring set, then push the shield.
+    /// Reconcile the monitoring set with what the rules now require, then push
+    /// the shield.
+    ///
+    /// Deliberately a diff, not a stop-everything-and-restart: tearing down a
+    /// window that is currently running would cost us its `intervalDidEnd`, and
+    /// the shield would stay up past its end until something else woke us.
     static func refresh(now: Date = Date()) {
-        center.stopMonitoring()
-
         guard SharedStore.scheduleEnabled else {
+            center.stopMonitoring()
             ShieldEngine.clear()
             return
         }
@@ -49,7 +53,18 @@ enum ScheduleManager {
             segments = Array(segments.prefix(maxActivities))
         }
 
-        for segment in segments {
+        let wanted = Set(segments.map(\.activityName))
+        let monitored = Set(center.activities.map(\.rawValue))
+
+        // Drop windows the rules no longer call for; never touch the override.
+        let stale = monitored
+            .subtracting(wanted)
+            .subtracting([overrideActivityName.rawValue])
+        if !stale.isEmpty {
+            center.stopMonitoring(stale.map(DeviceActivityName.init(_:)))
+        }
+
+        for segment in segments where !monitored.contains(segment.activityName) {
             let schedule = DeviceActivitySchedule(
                 intervalStart: components(from: segment.start),
                 intervalEnd: components(from: segment.end),
