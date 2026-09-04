@@ -43,17 +43,29 @@ enum ShieldEngine {
         let selections = SharedStore.selections
         var blockedApps = Set<ApplicationToken>()
         var blockedCategories = Set<ActivityCategoryToken>()
+        var blockedDomains = Set<WebDomain>()
 
         for group in groups {
-            guard let selection = selections[group.id] else { continue }
-            blockedApps.formUnion(selection.applicationTokens)
-            blockedCategories.formUnion(selection.categoryTokens)
+            if let selection = selections[group.id] {
+                blockedApps.formUnion(selection.applicationTokens)
+                blockedCategories.formUnion(selection.categoryTokens)
+            }
+            for domain in group.webDomains {
+                blockedDomains.insert(WebDomain(domain: domain))
+            }
         }
 
         store.shield.applications = blockedApps.isEmpty ? nil : blockedApps
         store.shield.applicationCategories = blockedCategories.isEmpty
             ? ShieldSettings.ActivityCategoryPolicy.none
             : .specific(blockedCategories)
+
+        // Websites go through the content filter rather than the shield: the
+        // shield only accepts tokens handed out by the picker, which cannot
+        // produce an arbitrary domain the user typed.
+        store.webContent.blockedByFilter = blockedDomains.isEmpty
+            ? nil
+            : .specific(blockedDomains)
 
         // Locked cannot be deleted while it is enforcing something.
         store.application.denyAppRemoval = true
@@ -63,6 +75,7 @@ enum ShieldEngine {
     static func clear() {
         store.shield.applications = nil
         store.shield.applicationCategories = ShieldSettings.ActivityCategoryPolicy.none
+        store.webContent.blockedByFilter = nil
         store.application.denyAppRemoval = false
     }
 }

@@ -16,7 +16,6 @@ struct SchedulesView: View {
     @State private var isCreating = false
     @State private var creatingForDay: Int?
     @State private var showWrongTag = false
-    @State private var showSeedConfirm = false
     @State private var showTagWritten = false
     @State private var tagWriteSucceeded = false
     @State private var tick = Date()
@@ -56,12 +55,6 @@ struct SchedulesView: View {
                 Text(tagWriteSucceeded
                      ? "Garde-la hors de portée : c'est elle qui ouvre les blocages."
                      : "L'écriture a échoué. Réessaie en gardant le tag contre le haut du téléphone.")
-            }
-            .confirmationDialog("Charger la routine ?", isPresented: $showSeedConfirm, titleVisibility: .visible) {
-                Button("Créer les 2 groupes") { store.seedRoutine() }
-                Button("Annuler", role: .cancel) { }
-            } message: {
-                Text("Travail bloqué hors 8h–10h et 13h15–17h45, loisir écran ouvert seulement de 18h40 à 20h. Les apps restent à choisir dans chaque groupe.")
             }
             .onReceive(clock) { now in
                 tick = now
@@ -172,12 +165,7 @@ struct SchedulesView: View {
     private var groupsSection: some View {
         Section {
             if store.groups.isEmpty {
-                Button {
-                    showSeedConfirm = true
-                } label: {
-                    Label("Charger ma routine", systemImage: "wand.and.stars")
-                }
-                Text("Aucun groupe. Ajoute-en un avec +, ou charge la routine pré-remplie.")
+                Text("Aucun groupe. Ajoute-en un avec le + en haut à droite.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -205,7 +193,7 @@ struct SchedulesView: View {
     // MARK: - Settings
 
     private var settingsSection: some View {
-        Section("Réglages") {
+        Section {
             Toggle("Moteur de planification", isOn: Binding(
                 get: { store.isEngineEnabled },
                 set: { store.setEngineEnabled($0) }
@@ -225,20 +213,16 @@ struct SchedulesView: View {
                 Label("Écrire ma carte NFC", systemImage: "wave.3.right.circle")
             }
 
-            if !store.groups.isEmpty {
-                Button {
-                    showSeedConfirm = true
-                } label: {
-                    Label("Ajouter ma routine", systemImage: "wand.and.stars")
-                }
-            }
-
             Button {
                 store.refreshState()
                 ScheduleManager.refresh()
             } label: {
-                Label("Recalculer maintenant", systemImage: "arrow.clockwise")
+                Label("Réappliquer le planning", systemImage: "arrow.clockwise")
             }
+        } header: {
+            Text("Réglages")
+        } footer: {
+            Text("Réappliquer sert si l'état affiché ne correspond pas à la réalité : ça recalcule ce qui doit être bloqué et réarme les réveils du système. Normalement inutile.")
         }
     }
 

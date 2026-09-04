@@ -25,6 +25,9 @@ struct GroupEditorView: View {
     @State private var selection = FamilyActivitySelection()
     @State private var isPickingApps = false
     @State private var editingWindow: TimeWindow?
+    @State private var webDomains: [String] = []
+    @State private var newDomain: String = ""
+    @State private var domainError: String?
 
     var body: some View {
         NavigationStack {
@@ -34,6 +37,7 @@ struct GroupEditorView: View {
                 }
 
                 appsSection
+                webSection
                 windowsSection
 
                 Section {
@@ -92,11 +96,55 @@ struct GroupEditorView: View {
         } header: {
             Text("Apps bloquées")
         } footer: {
-            Text(selectionCount == 0
-                 ? "Sans app choisie, le groupe ne bloque rien."
+            Text(blockedCount == 0
+                 ? "Sans app ni site choisi, le groupe ne bloque rien."
                  : "Ces apps valent pour toutes les plages ci-dessous.")
-            .foregroundStyle(selectionCount == 0 ? Color.amber : .secondary)
+            .foregroundStyle(blockedCount == 0 ? Color.amber : .secondary)
         }
+    }
+
+    // MARK: - Websites
+
+    private var webSection: some View {
+        Section {
+            ForEach(webDomains, id: \.self) { domain in
+                Text(domain)
+            }
+            .onDelete { webDomains.remove(atOffsets: $0) }
+
+            HStack {
+                TextField("reddit.com", text: $newDomain)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .onSubmit(addDomain)
+                Button("Ajouter", action: addDomain)
+                    .disabled(newDomain.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        } header: {
+            Text("Sites web bloqués")
+        } footer: {
+            if let domainError {
+                Text(domainError).foregroundStyle(Color.amber)
+            } else {
+                Text("Le sous-domaine est inclus : bloquer reddit.com bloque aussi www.reddit.com. Fonctionne dans Safari et les navigateurs qui respectent les restrictions du système.")
+            }
+        }
+    }
+
+    private func addDomain() {
+        guard let clean = BlockGroup.normalizeDomain(newDomain) else {
+            domainError = "Adresse invalide. Écris par exemple reddit.com."
+            return
+        }
+        guard !webDomains.contains(clean) else {
+            domainError = "\(clean) est déjà dans la liste."
+            newDomain = ""
+            return
+        }
+        webDomains.append(clean)
+        newDomain = ""
+        domainError = nil
     }
 
     // MARK: - Windows
@@ -162,6 +210,10 @@ struct GroupEditorView: View {
         !windows.isEmpty && windows.allSatisfy { !$0.weekdays.isEmpty && $0.durationMinutes > 0 }
     }
 
+    private var blockedCount: Int {
+        selectionCount + webDomains.count
+    }
+
     private func load() {
         guard let existing else {
             // A brand new group starts with one window, so there is something
@@ -174,6 +226,7 @@ struct GroupEditorView: View {
         }
         name = existing.name
         windows = existing.windows
+        webDomains = existing.webDomains
         isEnabled = existing.isEnabled
         selection = store.selection(for: existing.id)
     }
@@ -193,6 +246,7 @@ struct GroupEditorView: View {
             id: existing?.id ?? UUID(),
             name: name.isEmpty ? "Sans nom" : name,
             windows: windows.sorted { $0.startMinutes < $1.startMinutes },
+            webDomains: webDomains,
             isEnabled: isEnabled
         )
         store.save(group, selection: selection)

@@ -113,13 +113,52 @@ struct BlockGroup: Identifiable, Codable, Hashable {
     var id: UUID
     var name: String
     var windows: [TimeWindow]
+    /// Bare domains, e.g. "reddit.com". Blocked alongside the group's apps.
+    var webDomains: [String]
     var isEnabled: Bool
 
-    init(id: UUID = UUID(), name: String, windows: [TimeWindow] = [], isEnabled: Bool = true) {
+    init(
+        id: UUID = UUID(),
+        name: String,
+        windows: [TimeWindow] = [],
+        webDomains: [String] = [],
+        isEnabled: Bool = true
+    ) {
         self.id = id
         self.name = name
         self.windows = windows
+        self.webDomains = webDomains
         self.isEnabled = isEnabled
+    }
+
+    // Hand-written so groups saved before webDomains existed still decode:
+    // the synthesized initialiser would throw on the missing key and wipe
+    // everything the user had configured.
+    enum CodingKeys: String, CodingKey {
+        case id, name, windows, webDomains, isEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        windows = try c.decode([TimeWindow].self, forKey: .windows)
+        webDomains = try c.decodeIfPresent([String].self, forKey: .webDomains) ?? []
+        isEnabled = try c.decode(Bool.self, forKey: .isEnabled)
+    }
+
+    /// Strips scheme, www and trailing slash so "https://www.reddit.com/" and
+    /// "reddit.com" cannot end up as two different entries.
+    static func normalizeDomain(_ raw: String) -> String? {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for prefix in ["https://", "http://"] where text.hasPrefix(prefix) {
+            text.removeFirst(prefix.count)
+        }
+        if text.hasPrefix("www.") { text.removeFirst(4) }
+        if let slash = text.firstIndex(of: "/") { text = String(text[text.startIndex..<slash]) }
+        text = text.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        guard text.contains("."), !text.contains(" ") else { return nil }
+        return text
     }
 
     /// Active as soon as any of its windows is. Computed from the clock, never

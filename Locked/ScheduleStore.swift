@@ -132,30 +132,4 @@ final class ScheduleStore: ObservableObject {
         let seconds = Int(until.timeIntervalSinceNow)
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
-
-    // MARK: - Tim's routine
-
-    /// Seeds the two groups matching the printed wall schedule. Apps still have
-    /// to be picked per group afterwards.
-    func seedRoutine() {
-        let everyday: Set<Int> = [1, 2, 3, 4, 5, 6, 7]
-        let weekdays: Set<Int> = [2, 3, 4, 5, 6]
-
-        let travail = BlockGroup(
-            name: "Travail",
-            windows: [
-                TimeWindow(weekdays: everyday, startMinutes: 17 * 60 + 45, endMinutes: 8 * 60),
-                TimeWindow(weekdays: weekdays, startMinutes: 10 * 60, endMinutes: 13 * 60 + 15),
-            ]
-        )
-        let loisir = BlockGroup(
-            name: "Loisir écran",
-            windows: [
-                TimeWindow(weekdays: everyday, startMinutes: 20 * 60, endMinutes: 18 * 60 + 40),
-            ]
-        )
-
-        SharedStore.groups = SharedStore.groups + [travail, loisir]
-        applyAndReload()
-    }
 }
