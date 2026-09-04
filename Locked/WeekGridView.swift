@@ -4,7 +4,7 @@
 //
 //  The whole week at a glance: one column per day, blocked ranges filled in.
 //
-//  A flat list of rules never answered the question you actually have — "what
+//  A flat list never answered the question you actually have — "what
 //  does my Tuesday look like?" — because a rule spans several days and a day is
 //  covered by several rules. The grid inverts that: days are the axis, rules are
 //  what fills them.
@@ -13,9 +13,9 @@
 import SwiftUI
 
 struct WeekGridView: View {
-    let rules: [ScheduleRule]
-    let activeRuleIDs: Set<UUID>
-    let onSelectRule: (ScheduleRule) -> Void
+    let groups: [BlockGroup]
+    let activeGroupIDs: Set<UUID>
+    let onSelectGroup: (BlockGroup) -> Void
     let onSelectDay: (Int) -> Void
 
     /// Height of the 24-hour axis. Enough to read, short enough to sit above
@@ -37,8 +37,8 @@ struct WeekGridView: View {
     private var dayHeader: some View {
         HStack(spacing: 2) {
             Color.clear.frame(width: hourLabelWidth)
-            ForEach(ScheduleRule.orderedWeekdays, id: \.self) { day in
-                Text(String(ScheduleRule.shortName(day).prefix(1)))
+            ForEach(TimeWindow.orderedWeekdays, id: \.self) { day in
+                Text(String(TimeWindow.shortName(day).prefix(1)))
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(isWeekend(day) ? Color.amber : .secondary)
                     .frame(maxWidth: .infinity)
@@ -54,7 +54,7 @@ struct WeekGridView: View {
             ZStack(alignment: .topLeading) {
                 hourLines(width: geo.size.width)
 
-                ForEach(Array(ScheduleRule.orderedWeekdays.enumerated()), id: \.element) { index, day in
+                ForEach(Array(TimeWindow.orderedWeekdays.enumerated()), id: \.element) { index, day in
                     dayColumn(day: day, index: index, width: columnWidth)
                 }
             }
@@ -97,17 +97,17 @@ struct WeekGridView: View {
                 let height = max(3, gridHeight * CGFloat(block.endMinutes - block.startMinutes) / 1440)
 
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(color(for: block.ruleIndex))
+                    .fill(color(for: block.groupIndex))
                     .overlay(
                         RoundedRectangle(cornerRadius: 2)
-                            .strokeBorder(Color.white.opacity(activeRuleIDs.contains(block.ruleID) ? 0.9 : 0), lineWidth: 1)
+                            .strokeBorder(Color.white.opacity(activeGroupIDs.contains(block.groupID) ? 0.9 : 0), lineWidth: 1)
                     )
                     .frame(width: width - 2, height: height)
                     .offset(y: top)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if let rule = rules.first(where: { $0.id == block.ruleID }) {
-                            onSelectRule(rule)
+                        if let group = groups.first(where: { $0.id == block.groupID }) {
+                            onSelectGroup(group)
                         }
                     }
             }
@@ -121,12 +121,12 @@ struct WeekGridView: View {
     private var legend: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(Array(enabledRules.enumerated()), id: \.element.id) { index, rule in
+                ForEach(Array(enabledGroups.enumerated()), id: \.element.id) { index, group in
                     HStack(spacing: 4) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(color(for: index))
                             .frame(width: 9, height: 9)
-                        Text(rule.name)
+                        Text(group.name)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -138,39 +138,36 @@ struct WeekGridView: View {
 
     // MARK: - Layout maths
 
-    private var enabledRules: [ScheduleRule] {
-        rules.filter(\.isEnabled)
+    private var enabledGroups: [BlockGroup] {
+        groups.filter(\.isEnabled)
     }
 
     private struct Block {
         let id = UUID()
-        let ruleID: UUID
-        let ruleIndex: Int
+        let groupID: UUID
+        let groupIndex: Int
         let startMinutes: Int
         let endMinutes: Int
     }
 
-    /// Ranges drawn on `day`'s column, midnight-crossing rules included: their
-    /// tail is drawn on the following day, matching what isActive() decides.
+    /// Ranges drawn on `day`'s column, across every window of every group.
+    /// A midnight-crossing window draws its tail on the following day, matching
+    /// what isActive() decides.
     private func blocks(for day: Int) -> [Block] {
         var result: [Block] = []
+        let previous = day == 1 ? 7 : day - 1
 
-        for (index, rule) in enabledRules.enumerated() {
-            if rule.weekdays.contains(day) {
-                if rule.crossesMidnight {
-                    result.append(Block(ruleID: rule.id, ruleIndex: index,
-                                        startMinutes: rule.startMinutes, endMinutes: 1440))
-                } else {
-                    result.append(Block(ruleID: rule.id, ruleIndex: index,
-                                        startMinutes: rule.startMinutes, endMinutes: rule.endMinutes))
+        for (index, group) in enabledGroups.enumerated() {
+            for window in group.windows {
+                if window.weekdays.contains(day) {
+                    result.append(Block(groupID: group.id, groupIndex: index,
+                                        startMinutes: window.startMinutes,
+                                        endMinutes: window.crossesMidnight ? 1440 : window.endMinutes))
                 }
-            }
-
-            // Tail inherited from the previous day.
-            let previous = day == 1 ? 7 : day - 1
-            if rule.crossesMidnight, rule.weekdays.contains(previous), rule.endMinutes > 0 {
-                result.append(Block(ruleID: rule.id, ruleIndex: index,
-                                    startMinutes: 0, endMinutes: rule.endMinutes))
+                if window.crossesMidnight, window.weekdays.contains(previous), window.endMinutes > 0 {
+                    result.append(Block(groupID: group.id, groupIndex: index,
+                                        startMinutes: 0, endMinutes: window.endMinutes))
+                }
             }
         }
 

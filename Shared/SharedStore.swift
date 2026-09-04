@@ -17,31 +17,68 @@ enum SharedStore {
     }
 
     private enum Key {
-        static let rules = "scheduleRules"
+        static let groups = "blockGroups"
+        static let legacyRules = "scheduleRules"
         static let selections = "ruleSelections"
         static let overrideUntil = "nfcOverrideUntil"
-        static let overrideRules = "nfcOverrideRuleIDs"
+        static let overrideGroups = "nfcOverrideGroupIDs"
         static let nfcTag = "nfcTagPayload"
         static let scheduleEnabled = "scheduleEngineEnabled"
     }
 
-    // MARK: - Schedule rules
+    // MARK: - Block groups
 
-    static var rules: [ScheduleRule] {
+    static var groups: [BlockGroup] {
         get {
-            guard let data = defaults.data(forKey: Key.rules),
-                  let decoded = try? JSONDecoder().decode([ScheduleRule].self, from: data)
+            migrateLegacyRulesIfNeeded()
+            guard let data = defaults.data(forKey: Key.groups),
+                  let decoded = try? JSONDecoder().decode([BlockGroup].self, from: data)
             else { return [] }
             return decoded
         }
         set {
             if let encoded = try? JSONEncoder().encode(newValue) {
-                defaults.set(encoded, forKey: Key.rules)
+                defaults.set(encoded, forKey: Key.groups)
             }
         }
     }
 
-    /// Which apps each rule blocks, keyed by rule id.
+    /// Rules used to be one window each, with the app selection stored under
+    /// the rule id. Turn every old rule into a one-window group, keeping the id
+    /// so its selection follows.
+    private static func migrateLegacyRulesIfNeeded() {
+        guard defaults.data(forKey: Key.groups) == nil,
+              let data = defaults.data(forKey: Key.legacyRules),
+              let legacy = try? JSONDecoder().decode([LegacyRule].self, from: data)
+        else { return }
+
+        let migrated = legacy.map { rule in
+            BlockGroup(
+                id: rule.id,
+                name: rule.name,
+                windows: [TimeWindow(weekdays: rule.weekdays,
+                                     startMinutes: rule.startMinutes,
+                                     endMinutes: rule.endMinutes)],
+                isEnabled: rule.isEnabled
+            )
+        }
+        if let encoded = try? JSONEncoder().encode(migrated) {
+            defaults.set(encoded, forKey: Key.groups)
+            defaults.removeObject(forKey: Key.legacyRules)
+            NSLog("[Créneau] migrated \(migrated.count) rules to groups")
+        }
+    }
+
+    private struct LegacyRule: Codable {
+        let id: UUID
+        let name: String
+        let weekdays: Set<Int>
+        let startMinutes: Int
+        let endMinutes: Int
+        let isEnabled: Bool
+    }
+
+    /// Which apps each group blocks, keyed by group id.
     ///
     /// Kept beside the rules rather than inside them so ScheduleRule stays pure
     /// Foundation — that is what lets the date logic be tested outside iOS.
@@ -59,19 +96,19 @@ enum SharedStore {
         }
     }
 
-    static func selection(for ruleID: UUID) -> FamilyActivitySelection {
-        selections[ruleID] ?? FamilyActivitySelection()
+    static func selection(for groupID: UUID) -> FamilyActivitySelection {
+        selections[groupID] ?? FamilyActivitySelection()
     }
 
-    static func setSelection(_ selection: FamilyActivitySelection, for ruleID: UUID) {
+    static func setSelection(_ selection: FamilyActivitySelection, for groupID: UUID) {
         var all = selections
-        all[ruleID] = selection
+        all[groupID] = selection
         selections = all
     }
 
-    static func removeSelection(for ruleID: UUID) {
+    static func removeSelection(for groupID: UUID) {
         var all = selections
-        all.removeValue(forKey: ruleID)
+        all.removeValue(forKey: groupID)
         selections = all
     }
 
@@ -83,19 +120,19 @@ enum SharedStore {
 
     // MARK: - NFC override
 
-    /// While this date is in the future, the rules listed in `overriddenRuleIDs`
-    /// are suspended. Set only after a scan matched the paired tag.
+    /// While this date is in the future, the groups listed in
+    /// `overriddenGroupIDs` are suspended. Set only after a scan matched the tag.
     static var overrideUntil: Date? {
         get { defaults.object(forKey: Key.overrideUntil) as? Date }
         set { defaults.set(newValue, forKey: Key.overrideUntil) }
     }
 
-    static var overriddenRuleIDs: Set<UUID> {
+    static var overriddenGroupIDs: Set<UUID> {
         get {
-            let raw = defaults.stringArray(forKey: Key.overrideRules) ?? []
+            let raw = defaults.stringArray(forKey: Key.overrideGroups) ?? []
             return Set(raw.compactMap(UUID.init(uuidString:)))
         }
-        set { defaults.set(newValue.map(\.uuidString), forKey: Key.overrideRules) }
+        set { defaults.set(newValue.map(\.uuidString), forKey: Key.overrideGroups) }
     }
 
     static var isOverrideActive: Bool {
@@ -103,14 +140,14 @@ enum SharedStore {
         return until > Date()
     }
 
-    static func startOverride(minutes: Int, ruleIDs: Set<UUID>) {
+    static func startOverride(minutes: Int, groupIDs: Set<UUID>) {
         overrideUntil = Date().addingTimeInterval(TimeInterval(minutes * 60))
-        overriddenRuleIDs = ruleIDs
+        overriddenGroupIDs = groupIDs
     }
 
     static func clearOverride() {
         defaults.removeObject(forKey: Key.overrideUntil)
-        defaults.removeObject(forKey: Key.overrideRules)
+        defaults.removeObject(forKey: Key.overrideGroups)
     }
 
     // MARK: - NFC tag

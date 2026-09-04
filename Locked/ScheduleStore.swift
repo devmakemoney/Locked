@@ -13,9 +13,9 @@ import FamilyControls
 
 @MainActor
 final class ScheduleStore: ObservableObject {
-    @Published var rules: [ScheduleRule] = []
+    @Published var groups: [BlockGroup] = []
     @Published var isEngineEnabled: Bool = true
-    @Published var activeRuleIDs: Set<UUID> = []
+    @Published var activeGroupIDs: Set<UUID> = []
     @Published var overrideUntil: Date?
     @Published var isAuthorized: Bool = false
 
@@ -47,10 +47,10 @@ final class ScheduleStore: ObservableObject {
     // MARK: - Reading
 
     func reload() {
-        rules = SharedStore.rules.sorted { $0.startMinutes < $1.startMinutes }
+        groups = SharedStore.groups.sorted { $0.earliestStart < $1.earliestStart }
         isEngineEnabled = SharedStore.scheduleEnabled
         overrideUntil = SharedStore.isOverrideActive ? SharedStore.overrideUntil : nil
-        activeRuleIDs = Set(ShieldEngine.activeRules().map(\.id))
+        activeGroupIDs = Set(ShieldEngine.activeGroups().map(\.id))
         refreshAuthorization()
     }
 
@@ -59,43 +59,43 @@ final class ScheduleStore: ObservableObject {
         reload()
     }
 
-    func selection(for ruleID: UUID) -> FamilyActivitySelection {
-        SharedStore.selection(for: ruleID)
+    func selection(for groupID: UUID) -> FamilyActivitySelection {
+        SharedStore.selection(for: groupID)
     }
 
-    /// How many apps and categories a rule blocks, for the list row.
-    func blockedCount(for ruleID: UUID) -> Int {
-        let selection = SharedStore.selection(for: ruleID)
+    /// How many apps and categories a group blocks, for the list row.
+    func blockedCount(for groupID: UUID) -> Int {
+        let selection = SharedStore.selection(for: groupID)
         return selection.applicationTokens.count + selection.categoryTokens.count
     }
 
     // MARK: - Mutations
 
-    func save(_ rule: ScheduleRule, selection: FamilyActivitySelection) {
-        var all = SharedStore.rules
-        if let index = all.firstIndex(where: { $0.id == rule.id }) {
-            all[index] = rule
+    func save(_ group: BlockGroup, selection: FamilyActivitySelection) {
+        var all = SharedStore.groups
+        if let index = all.firstIndex(where: { $0.id == group.id }) {
+            all[index] = group
         } else {
-            all.append(rule)
+            all.append(group)
         }
-        SharedStore.rules = all
-        SharedStore.setSelection(selection, for: rule.id)
+        SharedStore.groups = all
+        SharedStore.setSelection(selection, for: group.id)
         applyAndReload()
     }
 
-    func delete(_ rule: ScheduleRule) {
-        SharedStore.rules = SharedStore.rules.filter { $0.id != rule.id }
-        SharedStore.removeSelection(for: rule.id)
+    func delete(_ group: BlockGroup) {
+        SharedStore.groups = SharedStore.groups.filter { $0.id != group.id }
+        SharedStore.removeSelection(for: group.id)
         applyAndReload()
     }
 
-    func toggle(_ rule: ScheduleRule, enabled: Bool) {
-        var copy = rule
+    func toggle(_ group: BlockGroup, enabled: Bool) {
+        var copy = group
         copy.isEnabled = enabled
-        var all = SharedStore.rules
-        if let index = all.firstIndex(where: { $0.id == rule.id }) {
+        var all = SharedStore.groups
+        if let index = all.firstIndex(where: { $0.id == group.id }) {
             all[index] = copy
-            SharedStore.rules = all
+            SharedStore.groups = all
         }
         applyAndReload()
     }
@@ -114,9 +114,9 @@ final class ScheduleStore: ObservableObject {
 
     /// Called only after a scan matched the paired tag.
     func unlockWithTag() {
-        let active = ShieldEngine.activeRules().map(\.id)
+        let active = ShieldEngine.activeGroups().map(\.id)
         guard !active.isEmpty else { return }
-        SharedStore.startOverride(minutes: overrideMinutes, ruleIDs: Set(active))
+        SharedStore.startOverride(minutes: overrideMinutes, groupIDs: Set(active))
         ScheduleManager.armOverrideEnd(at: SharedStore.overrideUntil ?? Date())
         ShieldEngine.apply()
         reload()
@@ -135,34 +135,27 @@ final class ScheduleStore: ObservableObject {
 
     // MARK: - Tim's routine
 
-    /// Seeds the three rules matching the printed wall schedule. Apps still
-    /// have to be picked per rule afterwards.
+    /// Seeds the two groups matching the printed wall schedule. Apps still have
+    /// to be picked per group afterwards.
     func seedRoutine() {
         let everyday: Set<Int> = [1, 2, 3, 4, 5, 6, 7]
         let weekdays: Set<Int> = [2, 3, 4, 5, 6]
 
-        let seeded = [
-            ScheduleRule(
-                name: "Travail — soir et nuit",
-                weekdays: everyday,
-                startMinutes: 17 * 60 + 45,
-                endMinutes: 8 * 60
-            ),
-            ScheduleRule(
-                name: "Travail — matinée dehors",
-                weekdays: weekdays,
-                startMinutes: 10 * 60,
-                endMinutes: 13 * 60 + 15
-            ),
-            ScheduleRule(
-                name: "Loisir écran",
-                weekdays: everyday,
-                startMinutes: 20 * 60,
-                endMinutes: 18 * 60 + 40
-            ),
-        ]
+        let travail = BlockGroup(
+            name: "Travail",
+            windows: [
+                TimeWindow(weekdays: everyday, startMinutes: 17 * 60 + 45, endMinutes: 8 * 60),
+                TimeWindow(weekdays: weekdays, startMinutes: 10 * 60, endMinutes: 13 * 60 + 15),
+            ]
+        )
+        let loisir = BlockGroup(
+            name: "Loisir écran",
+            windows: [
+                TimeWindow(weekdays: everyday, startMinutes: 20 * 60, endMinutes: 18 * 60 + 40),
+            ]
+        )
 
-        SharedStore.rules = SharedStore.rules + seeded
+        SharedStore.groups = SharedStore.groups + [travail, loisir]
         applyAndReload()
     }
 }

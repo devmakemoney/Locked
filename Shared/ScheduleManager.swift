@@ -40,7 +40,7 @@ enum ScheduleManager {
             return
         }
 
-        var segments = SharedStore.rules
+        var segments = SharedStore.groups
             .flatMap { $0.segments(from: now, days: horizonDays) }
             .sorted { $0.start < $1.start }
 

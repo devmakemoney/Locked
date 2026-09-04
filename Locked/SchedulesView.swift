@@ -2,7 +2,8 @@
 //  SchedulesView.swift
 //  Locked
 //
-//  The whole app: what is blocked right now, the rules, and the NFC unlock.
+//  The whole app: what is blocked right now, the week, the groups, and the
+//  NFC unlock.
 //
 
 import SwiftUI
@@ -11,7 +12,7 @@ struct SchedulesView: View {
     @StateObject private var store = ScheduleStore()
     @StateObject private var nfcReader = NFCReader()
 
-    @State private var editingRule: ScheduleRule?
+    @State private var editingGroup: BlockGroup?
     @State private var isCreating = false
     @State private var creatingForDay: Int?
     @State private var showWrongTag = false
@@ -28,8 +29,8 @@ struct SchedulesView: View {
                 if !store.isAuthorized { authorizationSection }
                 statusSection
                 if store.overrideUntil != nil { overrideSection }
-                if !store.rules.isEmpty { weekSection }
-                rulesSection
+                if !store.groups.isEmpty { weekSection }
+                groupsSection
                 settingsSection
             }
             .navigationTitle("Créneau")
@@ -39,10 +40,10 @@ struct SchedulesView: View {
                 }
             }
             .sheet(isPresented: $isCreating, onDismiss: { creatingForDay = nil }) {
-                ScheduleEditorView(store: store, existing: nil, initialDay: creatingForDay)
+                GroupEditorView(store: store, existing: nil, initialDay: creatingForDay)
             }
-            .sheet(item: $editingRule) { rule in
-                ScheduleEditorView(store: store, existing: rule, initialDay: nil)
+            .sheet(item: $editingGroup) { group in
+                GroupEditorView(store: store, existing: group, initialDay: nil)
             }
             .alert("Mauvaise carte", isPresented: $showWrongTag) {
                 Button("OK", role: .cancel) { }
@@ -57,10 +58,10 @@ struct SchedulesView: View {
                      : "L'écriture a échoué. Réessaie en gardant le tag contre le haut du téléphone.")
             }
             .confirmationDialog("Charger la routine ?", isPresented: $showSeedConfirm, titleVisibility: .visible) {
-                Button("Créer les 3 règles") { store.seedRoutine() }
+                Button("Créer les 2 groupes") { store.seedRoutine() }
                 Button("Annuler", role: .cancel) { }
             } message: {
-                Text("Travail bloqué hors 8h–10h et 13h15–17h45, loisir écran ouvert seulement de 18h40 à 20h. Les apps restent à choisir dans chaque règle.")
+                Text("Travail bloqué hors 8h–10h et 13h15–17h45, loisir écran ouvert seulement de 18h40 à 20h. Les apps restent à choisir dans chaque groupe.")
             }
             .onReceive(clock) { now in
                 tick = now
@@ -95,11 +96,11 @@ struct SchedulesView: View {
     private var statusSection: some View {
         Section {
             HStack(spacing: 12) {
-                Image(systemName: store.activeRuleIDs.isEmpty ? "lock.open" : "lock.fill")
+                Image(systemName: store.activeGroupIDs.isEmpty ? "lock.open" : "lock.fill")
                     .font(.title2)
-                    .foregroundStyle(store.activeRuleIDs.isEmpty ? Color.slate : Color.amber)
+                    .foregroundStyle(store.activeGroupIDs.isEmpty ? Color.slate : Color.amber)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(store.activeRuleIDs.isEmpty ? "Rien n'est bloqué" : "Blocage en cours")
+                    Text(store.activeGroupIDs.isEmpty ? "Rien n'est bloqué" : "Blocage en cours")
                         .font(.headline)
                     Text(activeSummary)
                         .font(.footnote)
@@ -108,7 +109,7 @@ struct SchedulesView: View {
             }
             .padding(.vertical, 4)
 
-            if !store.activeRuleIDs.isEmpty && store.overrideUntil == nil {
+            if !store.activeGroupIDs.isEmpty && store.overrideUntil == nil {
                 Button {
                     scanToUnlock()
                 } label: {
@@ -119,11 +120,11 @@ struct SchedulesView: View {
     }
 
     private var activeSummary: String {
-        guard !store.activeRuleIDs.isEmpty else {
+        guard !store.activeGroupIDs.isEmpty else {
             return store.isEngineEnabled ? "Aucune règle active à cette heure." : "Moteur désactivé."
         }
-        return store.rules
-            .filter { store.activeRuleIDs.contains($0.id) }
+        return store.groups
+            .filter { store.activeGroupIDs.contains($0.id) }
             .map(\.name)
             .joined(separator: ", ")
     }
@@ -150,9 +151,9 @@ struct SchedulesView: View {
     private var weekSection: some View {
         Section {
             WeekGridView(
-                rules: store.rules,
-                activeRuleIDs: store.activeRuleIDs,
-                onSelectRule: { editingRule = $0 },
+                groups: store.groups,
+                activeGroupIDs: store.activeGroupIDs,
+                onSelectGroup: { editingGroup = $0 },
                 onSelectDay: { day in
                     creatingForDay = day
                     isCreating = true
@@ -166,38 +167,38 @@ struct SchedulesView: View {
         }
     }
 
-    // MARK: - Rules
+    // MARK: - Groups
 
-    private var rulesSection: some View {
+    private var groupsSection: some View {
         Section {
-            if store.rules.isEmpty {
+            if store.groups.isEmpty {
                 Button {
                     showSeedConfirm = true
                 } label: {
                     Label("Charger ma routine", systemImage: "wand.and.stars")
                 }
-                Text("Aucune règle. Ajoute-en une avec +, ou charge la routine pré-remplie.")
+                Text("Aucun groupe. Ajoute-en un avec +, ou charge la routine pré-remplie.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(store.rules) { rule in
-                    RuleRow(
-                        rule: rule,
-                        blockedCount: store.blockedCount(for: rule.id),
-                        isActive: store.activeRuleIDs.contains(rule.id),
-                        onToggle: { store.toggle(rule, enabled: $0) }
+                ForEach(store.groups) { group in
+                    GroupRow(
+                        group: group,
+                        blockedCount: store.blockedCount(for: group.id),
+                        isActive: store.activeGroupIDs.contains(group.id),
+                        onToggle: { store.toggle(group, enabled: $0) }
                     )
                     .contentShape(Rectangle())
-                    .onTapGesture { editingRule = rule }
+                    .onTapGesture { editingGroup = group }
                 }
                 .onDelete { indexSet in
-                    indexSet.map { store.rules[$0] }.forEach(store.delete)
+                    indexSet.map { store.groups[$0] }.forEach(store.delete)
                 }
             }
         } header: {
-            Text("Règles")
+            Text("Groupes")
         } footer: {
-            Text("Chaque règle a ses propres apps, jours et horaires. Une plage qui finit avant son début se termine le lendemain matin.")
+            Text("Un groupe = des apps choisies une fois, et autant de plages horaires que tu veux.")
         }
     }
 
@@ -224,7 +225,7 @@ struct SchedulesView: View {
                 Label("Écrire ma carte NFC", systemImage: "wave.3.right.circle")
             }
 
-            if !store.rules.isEmpty {
+            if !store.groups.isEmpty {
                 Button {
                     showSeedConfirm = true
                 } label: {
@@ -264,11 +265,26 @@ struct SchedulesView: View {
 
 // MARK: - Row
 
-struct RuleRow: View {
-    let rule: ScheduleRule
+struct GroupRow: View {
+    let group: BlockGroup
     let blockedCount: Int
     let isActive: Bool
     let onToggle: (Bool) -> Void
+
+    /// "3 plages · 17h45 – 08h00, 10h00 – 13h15…" — enough to recognise the
+    /// group without opening it.
+    private var windowsLabel: String {
+        guard !group.windows.isEmpty else { return "Aucune plage" }
+        let ranges = group.windows
+            .sorted { $0.startMinutes < $1.startMinutes }
+            .prefix(2)
+            .map(\.rangeLabel)
+            .joined(separator: ", ")
+        if group.windows.count > 2 {
+            return "\(group.windows.count) plages · \(ranges)…"
+        }
+        return ranges
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -278,9 +294,9 @@ struct RuleRow: View {
                 .clipShape(Capsule())
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(rule.name)
+                Text(group.name)
                     .font(.body.weight(.medium))
-                Text("\(rule.rangeLabel) · \(rule.weekdaysLabel)")
+                Text(windowsLabel)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if blockedCount == 0 {
@@ -296,7 +312,7 @@ struct RuleRow: View {
 
             Spacer()
 
-            Toggle("", isOn: Binding(get: { rule.isEnabled }, set: onToggle))
+            Toggle("", isOn: Binding(get: { group.isEnabled }, set: onToggle))
                 .labelsHidden()
                 .tint(Color.amber)
         }

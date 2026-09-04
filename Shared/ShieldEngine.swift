@@ -16,26 +16,26 @@ import ManagedSettings
 enum ShieldEngine {
     static let store = ManagedSettingsStore()
 
-    /// Rules that should be blocking at `date`, override taken into account.
-    static func activeRules(at date: Date = Date()) -> [ScheduleRule] {
+    /// Groups that should be blocking at `date`, override taken into account.
+    static func activeGroups(at date: Date = Date()) -> [BlockGroup] {
         guard SharedStore.scheduleEnabled else { return [] }
 
-        let overridden = SharedStore.isOverrideActive ? SharedStore.overriddenRuleIDs : []
-        return SharedStore.rules.filter { rule in
-            rule.isActive(at: date) && !overridden.contains(rule.id)
+        let overridden = SharedStore.isOverrideActive ? SharedStore.overriddenGroupIDs : []
+        return SharedStore.groups.filter { group in
+            group.isActive(at: date) && !overridden.contains(group.id)
         }
     }
 
     /// Recompute and push the shield. Idempotent — safe to call from anywhere,
     /// any number of times.
     @discardableResult
-    static func apply(at date: Date = Date()) -> [ScheduleRule] {
+    static func apply(at date: Date = Date()) -> [BlockGroup] {
         if let until = SharedStore.overrideUntil, until <= date {
             SharedStore.clearOverride()
         }
 
-        let rules = activeRules(at: date)
-        guard !rules.isEmpty else {
+        let groups = activeGroups(at: date)
+        guard !groups.isEmpty else {
             clear()
             return []
         }
@@ -44,8 +44,8 @@ enum ShieldEngine {
         var blockedApps = Set<ApplicationToken>()
         var blockedCategories = Set<ActivityCategoryToken>()
 
-        for rule in rules {
-            guard let selection = selections[rule.id] else { continue }
+        for group in groups {
+            guard let selection = selections[group.id] else { continue }
             blockedApps.formUnion(selection.applicationTokens)
             blockedCategories.formUnion(selection.categoryTokens)
         }
@@ -57,7 +57,7 @@ enum ShieldEngine {
 
         // Locked cannot be deleted while it is enforcing something.
         store.application.denyAppRemoval = true
-        return rules
+        return groups
     }
 
     static func clear() {
