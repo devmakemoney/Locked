@@ -45,7 +45,7 @@ struct ScheduleEditorView: View {
                 } footer: {
                     if selectionCount == 0 {
                         Text("Sans app choisie, la règle ne bloque rien.")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.amber)
                     }
                 }
 
@@ -168,8 +168,8 @@ struct WeekdayPicker: View {
                     Text(String(ScheduleRule.shortName(day).prefix(1)))
                         .font(.system(size: 15, weight: .semibold))
                         .frame(maxWidth: .infinity, minHeight: 36)
-                        .background(isOn ? Color.accentColor : Color.secondary.opacity(0.15))
-                        .foregroundStyle(isOn ? Color.white : Color.primary)
+                        .background(isOn ? Color.amber : Color.secondary.opacity(0.15))
+                        .foregroundStyle(isOn ? Color.black.opacity(0.85) : Color.primary)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)

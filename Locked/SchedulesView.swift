@@ -30,7 +30,7 @@ struct SchedulesView: View {
                 rulesSection
                 settingsSection
             }
-            .navigationTitle("Locked")
+            .navigationTitle("Créneau")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { isCreating = true } label: { Image(systemName: "plus") }
@@ -75,7 +75,7 @@ struct SchedulesView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Autorisation manquante", systemImage: "exclamationmark.triangle.fill")
                     .font(.headline)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.amber)
                 Text("Sans l'accès Temps d'écran, aucune app ne peut être bloquée.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -95,7 +95,7 @@ struct SchedulesView: View {
             HStack(spacing: 12) {
                 Image(systemName: store.activeRuleIDs.isEmpty ? "lock.open" : "lock.fill")
                     .font(.title2)
-                    .foregroundStyle(store.activeRuleIDs.isEmpty ? .green : .red)
+                    .foregroundStyle(store.activeRuleIDs.isEmpty ? Color.slate : Color.amber)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(store.activeRuleIDs.isEmpty ? "Rien n'est bloqué" : "Blocage en cours")
                         .font(.headline)
@@ -249,7 +249,7 @@ struct RuleRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Rectangle()
-                .fill(isActive ? Color.red : Color.secondary.opacity(0.3))
+                .fill(isActive ? Color.amber : Color.secondary.opacity(0.25))
                 .frame(width: 4)
                 .clipShape(Capsule())
 
@@ -262,7 +262,7 @@ struct RuleRow: View {
                 if blockedCount == 0 {
                     Text("Aucune app choisie")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.amber)
                 } else {
                     Text("\(blockedCount) sélection\(blockedCount > 1 ? "s" : "")")
                         .font(.caption)
