@@ -13,6 +13,7 @@ struct SchedulesView: View {
 
     @State private var editingRule: ScheduleRule?
     @State private var isCreating = false
+    @State private var creatingForDay: Int?
     @State private var showWrongTag = false
     @State private var showSeedConfirm = false
     @State private var showTagWritten = false
@@ -27,6 +28,7 @@ struct SchedulesView: View {
                 if !store.isAuthorized { authorizationSection }
                 statusSection
                 if store.overrideUntil != nil { overrideSection }
+                if !store.rules.isEmpty { weekSection }
                 rulesSection
                 settingsSection
             }
@@ -36,11 +38,11 @@ struct SchedulesView: View {
                     Button { isCreating = true } label: { Image(systemName: "plus") }
                 }
             }
-            .sheet(isPresented: $isCreating) {
-                ScheduleEditorView(store: store, existing: nil)
+            .sheet(isPresented: $isCreating, onDismiss: { creatingForDay = nil }) {
+                ScheduleEditorView(store: store, existing: nil, initialDay: creatingForDay)
             }
             .sheet(item: $editingRule) { rule in
-                ScheduleEditorView(store: store, existing: rule)
+                ScheduleEditorView(store: store, existing: rule, initialDay: nil)
             }
             .alert("Mauvaise carte", isPresented: $showWrongTag) {
                 Button("OK", role: .cancel) { }
@@ -143,6 +145,27 @@ struct SchedulesView: View {
         }
     }
 
+    // MARK: - Week
+
+    private var weekSection: some View {
+        Section {
+            WeekGridView(
+                rules: store.rules,
+                activeRuleIDs: store.activeRuleIDs,
+                onSelectRule: { editingRule = $0 },
+                onSelectDay: { day in
+                    creatingForDay = day
+                    isCreating = true
+                }
+            )
+            .padding(.vertical, 4)
+        } header: {
+            Text("Ma semaine")
+        } footer: {
+            Text("Tape une plage pour la modifier, une zone vide pour ajouter une plage ce jour-là.")
+        }
+    }
+
     // MARK: - Rules
 
     private var rulesSection: some View {
@@ -186,6 +209,7 @@ struct SchedulesView: View {
                 get: { store.isEngineEnabled },
                 set: { store.setEngineEnabled($0) }
             ))
+            .tint(Color.amber)
 
             Picker("Durée du déblocage", selection: $store.overrideMinutes) {
                 Text("15 min").tag(15)
@@ -274,6 +298,7 @@ struct RuleRow: View {
 
             Toggle("", isOn: Binding(get: { rule.isEnabled }, set: onToggle))
                 .labelsHidden()
+                .tint(Color.amber)
         }
         .padding(.vertical, 2)
     }

@@ -13,6 +13,8 @@ struct ScheduleEditorView: View {
     @ObservedObject var store: ScheduleStore
 
     let existing: ScheduleRule?
+    /// Pre-checked day when the rule is created by tapping a column in the grid.
+    let initialDay: Int?
 
     @State private var name: String = ""
     @State private var weekdays: Set<Int> = [2, 3, 4, 5, 6]
@@ -21,6 +23,8 @@ struct ScheduleEditorView: View {
     @State private var isEnabled: Bool = true
     @State private var selection = FamilyActivitySelection()
     @State private var isPickingApps = false
+    @State private var isDuplicating = false
+    @State private var duplicateDays: Set<Int> = []
 
     var body: some View {
         NavigationStack {
@@ -79,6 +83,19 @@ struct ScheduleEditorView: View {
                     Toggle("Règle active", isOn: $isEnabled)
                 }
 
+                if existing != nil {
+                    Section {
+                        Button {
+                            duplicateDays = []
+                            isDuplicating = true
+                        } label: {
+                            Label("Dupliquer vers d'autres jours", systemImage: "doc.on.doc")
+                        }
+                    } footer: {
+                        Text("Crée une copie avec les mêmes apps, pour des horaires différents le week-end par exemple.")
+                    }
+                }
+
                 if let existing {
                     Section {
                         Button("Supprimer cette règle", role: .destructive) {
@@ -100,6 +117,7 @@ struct ScheduleEditorView: View {
                 }
             }
             .familyActivityPicker(isPresented: $isPickingApps, selection: $selection)
+            .sheet(isPresented: $isDuplicating) { duplicateSheet }
             .onAppear(perform: load)
         }
     }
@@ -130,13 +148,55 @@ struct ScheduleEditorView: View {
     }
 
     private func load() {
-        guard let existing else { return }
+        guard let existing else {
+            if let initialDay { weekdays = [initialDay] }
+            return
+        }
         name = existing.name
         weekdays = existing.weekdays
         startMinutes = existing.startMinutes
         endMinutes = existing.endMinutes
         isEnabled = existing.isEnabled
         selection = store.selection(for: existing.id)
+    }
+
+    private var duplicateSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    WeekdayPicker(selection: $duplicateDays)
+                } header: {
+                    Text("Jours de la copie")
+                } footer: {
+                    Text("La copie reprend les apps et les horaires. Tu pourras ensuite lui changer ses heures sans toucher à l'originale.")
+                }
+            }
+            .navigationTitle("Dupliquer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") { isDuplicating = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Créer") { duplicate() }
+                        .disabled(duplicateDays.isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func duplicate() {
+        let copy = ScheduleRule(
+            name: name.isEmpty ? "Copie" : "\(name) (copie)",
+            weekdays: duplicateDays,
+            startMinutes: startMinutes,
+            endMinutes: endMinutes,
+            isEnabled: isEnabled
+        )
+        store.save(copy, selection: selection)
+        isDuplicating = false
+        dismiss()
     }
 
     private func commit() {
