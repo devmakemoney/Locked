@@ -40,11 +40,6 @@ struct GroupEditorView: View {
                 webSection
                 windowsSection
 
-                Section {
-                    Toggle("Groupe actif", isOn: $isEnabled)
-                        .tint(Color.amber)
-                }
-
                 if let existing {
                     Section {
                         Button("Supprimer ce groupe", role: .destructive) {

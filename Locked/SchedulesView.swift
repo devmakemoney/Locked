@@ -1,9 +1,14 @@
 //
 //  SchedulesView.swift
-//  Locked
+//  Créneau
 //
-//  The whole app: what is blocked right now, the week, the groups, and the
-//  NFC unlock.
+//  The whole app on one screen: the dial for now, the grid for the week, the
+//  groups underneath.
+//
+//  Not a plain List: the project this was forked from committed to a full
+//  coloured surface, and a settings-style list makes a schedule feel like
+//  paperwork. Here the dial carries the screen and everything else is a quiet
+//  card — same idea, different execution.
 //
 
 import SwiftUI
@@ -18,131 +23,173 @@ struct SchedulesView: View {
     @State private var showWrongTag = false
     @State private var showTagWritten = false
     @State private var tagWriteSucceeded = false
-    @State private var tick = Date()
+    @State private var now = Date()
 
     private let clock = Timer.publish(every: 20, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        NavigationStack {
-            List {
-                if !store.isAuthorized { authorizationSection }
-                statusSection
-                if store.overrideUntil != nil { overrideSection }
-                if !store.groups.isEmpty { weekSection }
-                groupsSection
-                settingsSection
+        ZStack {
+            background
+            content
+        }
+        .preferredColorScheme(.dark)
+        .sheet(isPresented: $isCreating, onDismiss: { creatingForDay = nil }) {
+            GroupEditorView(store: store, existing: nil, initialDay: creatingForDay)
+        }
+        .sheet(item: $editingGroup) { group in
+            GroupEditorView(store: store, existing: group, initialDay: nil)
+        }
+        .alert("Mauvaise carte", isPresented: $showWrongTag) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Ce tag ne porte pas le texte attendu.")
+        }
+        .alert(tagWriteSucceeded ? "Carte prête" : "Échec", isPresented: $showTagWritten) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(tagWriteSucceeded
+                 ? "Garde-la hors de portée : c'est elle qui ouvre les blocages."
+                 : "L'écriture a échoué. Réessaie en gardant le tag contre le haut du téléphone.")
+        }
+        .onReceive(clock) { tick in
+            now = tick
+            store.refreshState()
+        }
+        .onAppear { store.refreshState() }
+    }
+
+    private var background: some View {
+        LinearGradient(
+            colors: [Color.groundTop, Color.ground],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    private var content: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                header
+                if !store.isAuthorized { authorizationCard }
+                dialCard
+                if store.overrideUntil != nil { overrideCard }
+                if !store.groups.isEmpty { weekCard }
+                groupsCard
+                settingsCard
+                Color.clear.frame(height: 20)
             }
-            .navigationTitle("Créneau")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { isCreating = true } label: { Image(systemName: "plus") }
-                }
-            }
-            .sheet(isPresented: $isCreating, onDismiss: { creatingForDay = nil }) {
-                GroupEditorView(store: store, existing: nil, initialDay: creatingForDay)
-            }
-            .sheet(item: $editingGroup) { group in
-                GroupEditorView(store: store, existing: group, initialDay: nil)
-            }
-            .alert("Mauvaise carte", isPresented: $showWrongTag) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text("Ce tag ne porte pas le texte attendu.")
-            }
-            .alert(tagWriteSucceeded ? "Carte prête" : "Échec", isPresented: $showTagWritten) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(tagWriteSucceeded
-                     ? "Garde-la hors de portée : c'est elle qui ouvre les blocages."
-                     : "L'écriture a échoué. Réessaie en gardant le tag contre le haut du téléphone.")
-            }
-            .onReceive(clock) { now in
-                tick = now
-                store.refreshState()
-            }
-            .onAppear { store.refreshState() }
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
         }
     }
 
-    // MARK: - Authorization
+    // MARK: - Header
 
-    private var authorizationSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Autorisation manquante", systemImage: "exclamationmark.triangle.fill")
-                    .font(.headline)
-                    .foregroundStyle(Color.amber)
-                Text("Sans l'accès Temps d'écran, aucune app ne peut être bloquée.")
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Créneau")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                Text(dateLabel)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Button("Autoriser") {
-                    Task { await store.requestAuthorization() }
-                }
-                .buttonStyle(.borderedProminent)
             }
-            .padding(.vertical, 4)
+            Spacer()
+            Button {
+                isCreating = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.ground)
+                    .frame(width: 36, height: 36)
+                    .background(Color.amber)
+                    .clipShape(Circle())
+            }
         }
+        .padding(.top, 6)
     }
 
-    // MARK: - Status
+    private var dateLabel: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.dateFormat = "EEEE d MMMM"
+        return formatter.string(from: now).capitalized
+    }
 
-    private var statusSection: some View {
-        Section {
-            HStack(spacing: 12) {
-                Image(systemName: store.activeGroupIDs.isEmpty ? "lock.open" : "lock.fill")
-                    .font(.title2)
-                    .foregroundStyle(store.activeGroupIDs.isEmpty ? Color.slate : Color.amber)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(store.activeGroupIDs.isEmpty ? "Rien n'est bloqué" : "Blocage en cours")
-                        .font(.headline)
-                    Text(activeSummary)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.vertical, 4)
+    // MARK: - Dial
+
+    private var dialCard: some View {
+        VStack(spacing: 14) {
+            DayDialView(
+                groups: store.groups,
+                activeGroupIDs: store.activeGroupIDs,
+                now: now,
+                nextEvent: store.nextEvent
+            )
 
             if !store.activeGroupIDs.isEmpty && store.overrideUntil == nil {
-                Button {
-                    scanToUnlock()
-                } label: {
+                Button(action: scanToUnlock) {
                     Label("Débloquer avec la carte", systemImage: "wave.3.right")
+                        .font(.callout.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(Color.amber)
+                        .foregroundStyle(Color.ground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
             }
         }
+        .card()
     }
 
-    private var activeSummary: String {
-        guard !store.activeGroupIDs.isEmpty else {
-            return store.isEngineEnabled ? "Aucune règle active à cette heure." : "Moteur désactivé."
+    // MARK: - Cards
+
+    private var authorizationCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Autorisation manquante", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(Color.amber)
+            Text("Sans l'accès Temps d'écran, aucune app ne peut être bloquée.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button("Autoriser") {
+                Task { await store.requestAuthorization() }
+            }
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(Color.amber)
+            .foregroundStyle(Color.ground)
+            .clipShape(Capsule())
         }
-        return store.groups
-            .filter { store.activeGroupIDs.contains($0.id) }
-            .map(\.name)
-            .joined(separator: ", ")
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
     }
 
-    private var overrideSection: some View {
-        Section {
-            HStack {
-                Label("Déblocage actif", systemImage: "hourglass")
-                Spacer()
+    private var overrideCard: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Déblocage actif")
+                    .font(.subheadline.weight(.semibold))
                 if let remaining = store.overrideRemainingLabel {
-                    Text(remaining)
-                        .monospacedDigit()
+                    Text("il reste \(remaining)")
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
-            Button("Re-verrouiller maintenant", role: .destructive) {
-                store.cancelOverride()
-            }
+            Spacer()
+            Button("Re-verrouiller") { store.cancelOverride() }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.amber)
         }
+        .card()
     }
 
-    // MARK: - Week
-
-    private var weekSection: some View {
-        Section {
+    private var weekCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("La semaine")
             WeekGridView(
                 groups: store.groups,
                 activeGroupIDs: store.activeGroupIDs,
@@ -152,78 +199,74 @@ struct SchedulesView: View {
                     isCreating = true
                 }
             )
-            .padding(.vertical, 4)
-        } header: {
-            Text("Ma semaine")
-        } footer: {
-            Text("Tape une plage pour la modifier, une zone vide pour ajouter une plage ce jour-là.")
         }
+        .card()
     }
 
-    // MARK: - Groups
+    private var groupsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Groupes")
 
-    private var groupsSection: some View {
-        Section {
             if store.groups.isEmpty {
-                Text("Aucun groupe. Ajoute-en un avec le + en haut à droite.")
+                Text("Aucun groupe. Touche le + en haut pour en créer un.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(store.groups) { group in
+                ForEach(Array(store.groups.enumerated()), id: \.element.id) { index, group in
                     GroupRow(
                         group: group,
                         blockedCount: store.blockedCount(for: group.id),
-                        isActive: store.activeGroupIDs.contains(group.id),
-                        onToggle: { store.toggle(group, enabled: $0) }
+                        isActive: store.activeGroupIDs.contains(group.id)
                     )
                     .contentShape(Rectangle())
                     .onTapGesture { editingGroup = group }
-                }
-                .onDelete { indexSet in
-                    indexSet.map { store.groups[$0] }.forEach(store.delete)
+
+                    if index < store.groups.count - 1 {
+                        Divider().overlay(Color.cardBorder)
+                    }
                 }
             }
-        } header: {
-            Text("Groupes")
-        } footer: {
-            Text("Un groupe = des apps choisies une fois, et autant de plages horaires que tu veux.")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
     }
 
-    // MARK: - Settings
+    private var settingsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionTitle("Réglages")
 
-    private var settingsSection: some View {
-        Section {
-            Toggle("Moteur de planification", isOn: Binding(
-                get: { store.isEngineEnabled },
-                set: { store.setEngineEnabled($0) }
-            ))
-            .tint(Color.amber)
-
-            Picker("Durée du déblocage", selection: $store.overrideMinutes) {
-                Text("15 min").tag(15)
-                Text("30 min").tag(30)
-                Text("1 h").tag(60)
-                Text("2 h").tag(120)
+            HStack {
+                Text("Durée du déblocage")
+                    .font(.subheadline)
+                Spacer()
+                Picker("", selection: $store.overrideMinutes) {
+                    Text("15 min").tag(15)
+                    Text("30 min").tag(30)
+                    Text("1 h").tag(60)
+                    Text("2 h").tag(120)
+                }
+                .labelsHidden()
+                .tint(Color.amber)
             }
 
-            Button {
-                writeTag()
-            } label: {
+            Divider().overlay(Color.cardBorder)
+
+            Button(action: writeTag) {
                 Label("Écrire ma carte NFC", systemImage: "wave.3.right.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.amber)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Button {
-                store.refreshState()
-                ScheduleManager.refresh()
-            } label: {
-                Label("Réappliquer le planning", systemImage: "arrow.clockwise")
-            }
-        } header: {
-            Text("Réglages")
-        } footer: {
-            Text("Réappliquer sert si l'état affiché ne correspond pas à la réalité : ça recalcule ce qui doit être bloqué et réarme les réveils du système. Normalement inutile.")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.semibold))
+            .tracking(1.2)
+            .foregroundStyle(.tertiary)
     }
 
     // MARK: - Actions
@@ -253,10 +296,8 @@ struct GroupRow: View {
     let group: BlockGroup
     let blockedCount: Int
     let isActive: Bool
-    let onToggle: (Bool) -> Void
 
-    /// "3 plages · 17h45 – 08h00, 10h00 – 13h15…" — enough to recognise the
-    /// group without opening it.
+    /// Enough to recognise the group without opening it.
     private var windowsLabel: String {
         guard !group.windows.isEmpty else { return "Aucune plage" }
         let ranges = group.windows
@@ -264,18 +305,27 @@ struct GroupRow: View {
             .prefix(2)
             .map(\.rangeLabel)
             .joined(separator: ", ")
-        if group.windows.count > 2 {
-            return "\(group.windows.count) plages · \(ranges)…"
-        }
-        return ranges
+        return group.windows.count > 2 ? "\(group.windows.count) plages · \(ranges)…" : ranges
+    }
+
+    private var contentLabel: String {
+        let sites = group.webDomains.count
+        if blockedCount == 0 && sites == 0 { return "Rien de sélectionné" }
+        var parts: [String] = []
+        if blockedCount > 0 { parts.append("\(blockedCount) app\(blockedCount > 1 ? "s" : "")") }
+        if sites > 0 { parts.append("\(sites) site\(sites > 1 ? "s" : "")") }
+        return parts.joined(separator: " · ")
+    }
+
+    private var isEmpty: Bool {
+        blockedCount == 0 && group.webDomains.isEmpty
     }
 
     var body: some View {
         HStack(spacing: 12) {
-            Rectangle()
-                .fill(isActive ? Color.amber : Color.secondary.opacity(0.25))
-                .frame(width: 4)
-                .clipShape(Capsule())
+            Circle()
+                .fill(isActive ? Color.amber : Color.cardBorder)
+                .frame(width: 8, height: 8)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(group.name)
@@ -283,22 +333,16 @@ struct GroupRow: View {
                 Text(windowsLabel)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                if blockedCount == 0 {
-                    Text("Aucune app choisie")
-                        .font(.caption)
-                        .foregroundStyle(Color.amber)
-                } else {
-                    Text("\(blockedCount) sélection\(blockedCount > 1 ? "s" : "")")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
+                Text(contentLabel)
+                    .font(.caption2)
+                    .foregroundStyle(isEmpty ? Color.amber : Color.slate)
             }
 
             Spacer()
 
-            Toggle("", isOn: Binding(get: { group.isEnabled }, set: onToggle))
-                .labelsHidden()
-                .tint(Color.amber)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 2)
     }

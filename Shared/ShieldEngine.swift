@@ -18,8 +18,6 @@ enum ShieldEngine {
 
     /// Groups that should be blocking at `date`, override taken into account.
     static func activeGroups(at date: Date = Date()) -> [BlockGroup] {
-        guard SharedStore.scheduleEnabled else { return [] }
-
         let overridden = SharedStore.isOverrideActive ? SharedStore.overriddenGroupIDs : []
         return SharedStore.groups.filter { group in
             group.isActive(at: date) && !overridden.contains(group.id)

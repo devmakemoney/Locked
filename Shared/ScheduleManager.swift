@@ -34,12 +34,6 @@ enum ScheduleManager {
     /// window that is currently running would cost us its `intervalDidEnd`, and
     /// the shield would stay up past its end until something else woke us.
     static func refresh(now: Date = Date()) {
-        guard SharedStore.scheduleEnabled else {
-            center.stopMonitoring()
-            ShieldEngine.clear()
-            return
-        }
-
         var segments = SharedStore.groups
             .flatMap { $0.segments(from: now, days: horizonDays) }
             .sorted { $0.start < $1.start }

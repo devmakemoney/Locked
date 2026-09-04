@@ -23,7 +23,6 @@ enum SharedStore {
         static let overrideUntil = "nfcOverrideUntil"
         static let overrideGroups = "nfcOverrideGroupIDs"
         static let nfcTag = "nfcTagPayload"
-        static let scheduleEnabled = "scheduleEngineEnabled"
     }
 
     // MARK: - Block groups
@@ -110,12 +109,6 @@ enum SharedStore {
         var all = selections
         all.removeValue(forKey: groupID)
         selections = all
-    }
-
-    /// Master switch. Off means nothing is ever shielded.
-    static var scheduleEnabled: Bool {
-        get { defaults.object(forKey: Key.scheduleEnabled) as? Bool ?? true }
-        set { defaults.set(newValue, forKey: Key.scheduleEnabled) }
     }
 
     // MARK: - NFC override

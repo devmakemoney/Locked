@@ -95,15 +95,19 @@ struct WeekGridView: View {
             ForEach(blocks(for: day), id: \.id) { block in
                 let top = gridHeight * CGFloat(block.startMinutes) / 1440
                 let height = max(3, gridHeight * CGFloat(block.endMinutes - block.startMinutes) / 1440)
+                // One sub-column per group: stacked on the full width, whichever
+                // group drew first simply disappeared under the next.
+                let lanes = CGFloat(max(enabledGroups.count, 1))
+                let laneWidth = (width - 2) / lanes
 
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 1.5)
                     .fill(color(for: block.groupIndex))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 2)
+                        RoundedRectangle(cornerRadius: 1.5)
                             .strokeBorder(Color.white.opacity(activeGroupIDs.contains(block.groupID) ? 0.9 : 0), lineWidth: 1)
                     )
-                    .frame(width: width - 2, height: height)
-                    .offset(y: top)
+                    .frame(width: max(laneWidth - 1, 2), height: height)
+                    .offset(x: CGFloat(block.groupIndex) * laneWidth, y: top)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         if let group = groups.first(where: { $0.id == block.groupID }) {
