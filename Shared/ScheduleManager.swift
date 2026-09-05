@@ -81,6 +81,11 @@ enum ScheduleManager {
     /// Wakes us when the NFC unlock expires so the shield comes back even if
     /// the app never returns to the foreground.
     static func armOverrideEnd(at until: Date, now: Date = Date()) {
+        // A second scan while a previous override window is still running would
+        // hit startMonitoring on a live activity; clear it first so the new end
+        // alarm is actually armed.
+        stopOverrideWindow()
+
         // DeviceActivity refuses windows shorter than 15 minutes.
         let end = max(until, now.addingTimeInterval(15 * 60 + 60))
         let schedule = DeviceActivitySchedule(
@@ -88,7 +93,18 @@ enum ScheduleManager {
             intervalEnd: components(from: end),
             repeats: false
         )
-        try? center.startMonitoring(overrideActivityName, during: schedule)
+        do {
+            try center.startMonitoring(overrideActivityName, during: schedule)
+        } catch {
+            NSLog("[Créneau] could not arm the override end: \(error.localizedDescription)")
+        }
+    }
+
+    /// Drops the alarm that would end the override. Called when the user
+    /// re-locks by hand: without it the window keeps running and the next scan
+    /// cannot arm a fresh one.
+    static func stopOverrideWindow() {
+        center.stopMonitoring([overrideActivityName])
     }
 
     private static func components(from date: Date) -> DateComponents {

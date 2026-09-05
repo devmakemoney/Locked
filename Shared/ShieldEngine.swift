@@ -67,10 +67,15 @@ enum ShieldEngine {
 
         // Locked cannot be deleted while it is enforcing something.
         store.application.denyAppRemoval = true
+
+        // The one line that tells us, after the fact, whether a block that
+        // "did nothing" was a store we never wrote or a shield iOS ignored.
+        NSLog("[Créneau] shield: \(groups.count) group(s), \(blockedApps.count) app(s), \(blockedCategories.count) categor(ies), \(blockedDomains.count) domain(s)")
         return groups
     }
 
     static func clear() {
+        NSLog("[Créneau] shield: cleared")
         store.shield.applications = nil
         store.shield.applicationCategories = ShieldSettings.ActivityCategoryPolicy.none
         store.webContent.blockedByFilter = nil

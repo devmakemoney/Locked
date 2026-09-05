@@ -148,6 +148,7 @@ final class ScheduleStore: ObservableObject {
 
     func cancelOverride() {
         SharedStore.clearOverride()
+        ScheduleManager.stopOverrideWindow()
         applyAndReload()
     }
 

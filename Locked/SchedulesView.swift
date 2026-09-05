@@ -168,22 +168,32 @@ struct SchedulesView: View {
     }
 
     private var overrideCard: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Déblocage actif")
-                    .font(.subheadline.weight(.semibold))
-                if let remaining = store.overrideRemainingLabel {
-                    Text("il reste \(remaining)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Déblocage actif")
+                        .font(.subheadline.weight(.semibold))
+                    if let remaining = store.overrideRemainingLabel {
+                        Text("il reste \(remaining)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                 }
+                Spacer()
+                Button("Re-verrouiller") { store.cancelOverride() }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.amber)
             }
-            Spacer()
-            Button("Re-verrouiller") { store.cancelOverride() }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.amber)
+
+            // iOS only checks the shield when an app is launched. An app left
+            // open during the unlock stays usable after the re-lock, which
+            // looks exactly like the re-lock doing nothing.
+            Text("Ferme d'abord l'app débloquée : iOS ne repose pas le blocage sur une app restée ouverte.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .card()
     }
 
