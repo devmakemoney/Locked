@@ -152,6 +152,43 @@ final class ScheduleStore: ObservableObject {
         applyAndReload()
     }
 
+    // MARK: - Diagnostics
+
+    /// Everything needed to tell "we never wrote the store" apart from "iOS
+    /// refused what we wrote", in a form Tim can read on the device and paste
+    /// back. The console is not an option on a phone that is not plugged in.
+    var diagnosticReport: String {
+        var lines: [String] = []
+        lines.append("Créneau — \(DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium))")
+        lines.append("Temps d'écran : \(isAuthorized ? "autorisé" : "REFUSÉ")")
+
+        let active = Set(ShieldEngine.activeGroups().map(\.id))
+        if SharedStore.groups.isEmpty {
+            lines.append("Aucun groupe")
+        }
+        for group in SharedStore.groups {
+            let selection = SharedStore.selection(for: group.id)
+            lines.append(
+                "• \(group.name) — \(group.isEnabled ? "activé" : "désactivé"), "
+                + "\(active.contains(group.id) ? "BLOQUE" : "ouvert") · "
+                + "\(selection.applicationTokens.count) app, "
+                + "\(selection.categoryTokens.count) cat, "
+                + "\(group.webDomains.count) site"
+            )
+        }
+
+        if let until = SharedStore.overrideUntil {
+            lines.append("Override jusqu'à \(DateFormatter.localizedString(from: until, dateStyle: .none, timeStyle: .medium))"
+                         + " (\(SharedStore.isOverrideActive ? "actif" : "expiré"))")
+        } else {
+            lines.append("Override : aucun")
+        }
+
+        lines.append("Store maintenant : \(ShieldEngine.storeReadback)")
+        lines.append(SharedStore.lastShieldLog ?? "Aucun apply enregistré")
+        return lines.joined(separator: "\n")
+    }
+
     var overrideRemainingLabel: String? {
         guard let until = overrideUntil, until > Date() else { return nil }
         let seconds = Int(until.timeIntervalSinceNow)

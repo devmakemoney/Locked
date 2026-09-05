@@ -23,6 +23,7 @@ enum SharedStore {
         static let overrideUntil = "nfcOverrideUntil"
         static let overrideGroups = "nfcOverrideGroupIDs"
         static let nfcTag = "nfcTagPayload"
+        static let lastShieldLog = "lastShieldLog"
     }
 
     // MARK: - Block groups
@@ -141,6 +142,16 @@ enum SharedStore {
     static func clearOverride() {
         defaults.removeObject(forKey: Key.overrideUntil)
         defaults.removeObject(forKey: Key.overrideGroups)
+    }
+
+    // MARK: - Diagnostics
+
+    /// Last thing ShieldEngine pushed, and what the store answered. Written by
+    /// whichever process ran last, so the app can show what the monitor
+    /// extension did while the app was closed.
+    static var lastShieldLog: String? {
+        get { defaults.string(forKey: Key.lastShieldLog) }
+        set { defaults.set(newValue, forKey: Key.lastShieldLog) }
     }
 
     // MARK: - NFC tag

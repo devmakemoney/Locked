@@ -12,6 +12,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SchedulesView: View {
     @StateObject private var store = ScheduleStore()
@@ -24,6 +25,7 @@ struct SchedulesView: View {
     @State private var showTagWritten = false
     @State private var tagWriteSucceeded = false
     @State private var now = Date()
+    @State private var didCopyDiagnostic = false
 
     private let clock = Timer.publish(every: 20, on: .main, in: .common).autoconnect()
 
@@ -77,6 +79,7 @@ struct SchedulesView: View {
                 if !store.groups.isEmpty { weekCard }
                 groupsCard
                 settingsCard
+                diagnosticsCard
                 Color.clear.frame(height: 20)
             }
             .padding(.horizontal, 18)
@@ -266,6 +269,32 @@ struct SchedulesView: View {
                     .font(.subheadline)
                     .foregroundStyle(Color.amber)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    /// Temporary, and deliberately ugly: the shield is not coming back after a
+    /// manual re-lock and there is no console on a phone that is not plugged
+    /// into Xcode. This says what we asked the store for and what it answered.
+    private var diagnosticsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Diagnostic")
+
+            Text(store.diagnosticReport)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                UIPasteboard.general.string = store.diagnosticReport
+                didCopyDiagnostic = true
+            } label: {
+                Label(didCopyDiagnostic ? "Copié" : "Copier", systemImage: "doc.on.doc")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.amber)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

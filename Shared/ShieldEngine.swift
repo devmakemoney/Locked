@@ -68,17 +68,63 @@ enum ShieldEngine {
         // Locked cannot be deleted while it is enforcing something.
         store.application.denyAppRemoval = true
 
-        // The one line that tells us, after the fact, whether a block that
-        // "did nothing" was a store we never wrote or a shield iOS ignored.
-        NSLog("[Créneau] shield: \(groups.count) group(s), \(blockedApps.count) app(s), \(blockedCategories.count) categor(ies), \(blockedDomains.count) domain(s)")
+        record(
+            intent: "\(groups.count) groupe(s) · \(blockedApps.count) app · "
+                + "\(blockedCategories.count) cat · \(blockedDomains.count) site",
+            at: date
+        )
         return groups
     }
 
     static func clear() {
-        NSLog("[Créneau] shield: cleared")
         store.shield.applications = nil
         store.shield.applicationCategories = ShieldSettings.ActivityCategoryPolicy.none
         store.webContent.blockedByFilter = nil
         store.application.denyAppRemoval = false
+        record(intent: "rien à bloquer", at: Date())
     }
+
+    // MARK: - Diagnostics
+
+    /// What the store answers when we read it straight back after writing.
+    ///
+    /// The point of reading back: a block that "does nothing" is either a store
+    /// we never wrote (intent empty) or one iOS refused (intent full, readback
+    /// empty). Guessing between those from the outside is impossible, and the
+    /// console is not reachable on a device that is not plugged into Xcode.
+    static var storeReadback: String {
+        var parts: [String] = []
+        parts.append("apps \(store.shield.applications?.count.description ?? "nil")")
+        parts.append("cat " + categoriesLabel)
+        parts.append("sites " + (store.webContent.blockedByFilter != nil ? "actif" : "nil"))
+        parts.append("denyAppRemoval " + (store.application.denyAppRemoval == true ? "oui" : "non"))
+        return parts.joined(separator: " · ")
+    }
+
+    private static var categoriesLabel: String {
+        guard let policy = store.shield.applicationCategories else { return "nil" }
+        switch policy {
+        case .none: return "aucune"
+        case .all: return "toutes"
+        case .specific(let categories, _): return "\(categories.count)"
+        @unknown default: return "?"
+        }
+    }
+
+    /// Both processes write here, so the app can show what the extension did
+    /// while it was not running.
+    private static func record(intent: String, at date: Date) {
+        let stamp = DateFormatter.diagnosticClock.string(from: date)
+        let line = "\(stamp) — voulu : \(intent)\n\(stamp) — store : \(storeReadback)"
+        SharedStore.lastShieldLog = line
+        NSLog("[Créneau] \(line.replacingOccurrences(of: "\n", with: " | "))")
+    }
+}
+
+private extension DateFormatter {
+    static let diagnosticClock: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
 }
